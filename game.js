@@ -653,7 +653,7 @@ function spawnGround(seen){
     const base=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.06,0.26),new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.6}));base.material.userData.own=true;base.position.y=0.06;grp.add(base);
     const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:emojiTex(d[1]),transparent:true}));spr.material.userData.own=true;spr.scale.set(0.5,0.5,1);spr.position.y=0.42;grp.add(spr);
     groundItems.push({it,pos:new THREE.Vector3(x,0.3,z),grp,glow,base,spr,ph:rng()*6})}
-  gLabel=textSprite('',{border:'#ffd54a',w:1.9});gLabel.visible=false;world.add(gLabel)}
+  gLabel=gTextSprite();gLabel.visible=false;world.add(gLabel)}
 function nearGround(){const fx=-Math.sin(player.yaw),fz=-Math.cos(player.yaw);let best=null,bd=1e9;
   for(const g of groundItems){const dx=g.pos.x-player.pos.x,dz=g.pos.z-player.pos.z,d=Math.hypot(dx,dz);if(d>1.8)continue;
     if(d>0.9&&(dx*fx+dz*fz)/d<0.3)continue;if(d<bd){bd=d;best=g}}return best}
@@ -666,7 +666,25 @@ function pickGround(g){if(player.bag.length>=BAGCAP){toast('背包滿了。地�
   toast(`撿起 <span style="color:${RCSS[g.it.r]}">${g.it.ic} ${g.it.name}</span>　${fmt(g.it.v)}`,1100);renderBag();updHud();return true}
 function stepGround(dt,g){const t=performance.now()/1000;
   for(const o of groundItems){o.spr.position.y=0.42+Math.sin(t*2.2+o.ph)*0.06;o.base.rotation.y+=dt*1.2;o.glow.material.opacity=0.25+Math.sin(t*3+o.ph)*0.12+(o===g?0.25:0);o.glow.scale.setScalar(o===g?1.25:1)}
-  if(gLabel){if(g&&state==='play'){gLabel.visible=true;const txt=`[E] 撿起 ${g.it.name} ${fmt(g.it.v)}`;if(gLabel.userData.t!==txt){gLabel.userData.t=txt;gLabel.userData.draw(txt)}gLabel.position.set(g.pos.x,1.05+Math.sin(t*2)*0.03,g.pos.z)}else gLabel.visible=false}}
+  if(gLabel){if(g&&state==='play'){gLabel.visible=true;const txt=`[E] 撿起 ${g.it.name} ${fmt(g.it.v)}`;if(gLabel.userData.t!==txt){gLabel.userData.t=txt;gLabel.userData.draw(txt)}placeGLabel(g,t)}else gLabel.visible=false}}
+
+const _gv=new THREE.Vector3(),GBLK='#prompt,#raidinfo,#toast,#cine,#objective,#timer,#hubhint,#touchui .tb,#stick,#btnMenu,#ammo,#hp,#value';
+function placeGLabel(g,t){const r=renderer.domElement.getBoundingClientRect(),W=r.width,H=r.height;if(!W||!H)return;
+  const ph=Math.max(24,Math.min(30,H*0.045)),pw=Math.min(ph*gLabel.userData.asp,W*0.9),phh=pw/gLabel.userData.asp;
+  const th=2*Math.tan(THREE.MathUtils.degToRad(camera.fov)/2);gLabel.scale.set(pw/H*th,phh/H*th,1);
+  _gv.set(g.pos.x,0.95+Math.sin(t*2)*0.02,g.pos.z).project(camera);if(_gv.z>1){gLabel.visible=false;return}
+  let cx=(_gv.x+1)/2*W,cy=(1-_gv.y)/2*H;const bl=[];
+  for(const e of document.querySelectorAll(GBLK)){if(!e.offsetParent||(!e.innerText.trim()&&e.id!=='stick'))continue;const b=e.getBoundingClientRect();if(b.width&&getComputedStyle(e).opacity>0.05)bl.push({l:b.left-r.left-4,r:b.right-r.left+4,t:b.top-r.top-4,b:b.bottom-r.top+4})}
+  const hit=y=>bl.find(b=>cx+pw/2>b.l&&cx-pw/2<b.r&&y+phh/2>b.t&&y-phh/2<b.b);
+  cy=Math.max(phh/2+2,Math.min(H-phh/2-2,cy));let b0=hit(cy);
+  if(b0){const c=[];for(const b of bl){c.push(b.t-phh/2,b.b+phh/2)}c.sort((a,b)=>Math.abs(a-cy)-Math.abs(b-cy));const ok=c.find(y=>y>phh/2&&y<H-phh/2&&!hit(y));if(ok===undefined){gLabel.visible=false;return}cy=ok}
+  _gv.x=cx/W*2-1;_gv.y=1-cy/H*2;_gv.unproject(camera);gLabel.position.copy(_gv)}
+
+function gTextSprite(){const c=document.createElement('canvas');c.width=1024;c.height=128;const tex=new THREE.CanvasTexture(c);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,sizeAttenuation:false}));s.material.userData.own=true;s.renderOrder=20;s.userData.asp=4;
+  s.userData.draw=t=>{const x=c.getContext('2d');x.clearRect(0,0,1024,128);x.font='bold 72px sans-serif';const tw=Math.min(980,x.measureText(t).width),w=tw+44;
+    x.fillStyle='rgba(10,12,16,.85)';x.beginPath();x.roundRect?x.roundRect(2,6,w-4,116,30):x.rect(2,6,w-4,116);x.fill();x.strokeStyle='#ffd54a';x.lineWidth=6;x.stroke();
+    x.fillStyle='#ffd54a';x.textAlign='center';x.textBaseline='middle';x.fillText(t,w/2,68,980);tex.repeat.set(w/1024,1);tex.needsUpdate=true;s.userData.asp=w/128};return s}
 // ================= BASE HUB (walkable) =================
 const stations=[];let hubSt=null,npcGrp=null,npcBubble=null,npcBubT=0,hubT=0;
 function textSprite(txt,o={}){const c=document.createElement('canvas');c.width=512;c.height=128;const tex=new THREE.CanvasTexture(c);
@@ -836,7 +854,7 @@ function loop(now){
 // title backdrop: a random house level
 if(S.inRaid){const g0=S.inRaid.gear||[];const g=[];for(const id of g0){if(Math.random()<BAL.insurance)S.gear[id]=(S.gear[id]||0)+1;else g.push(id)}S.inRaid=null;S.stats.deaths++;save();setTimeout(()=>toast(`上一局中途離開，視同陣亡。${g.length?'遺失：'+g.map(gearName).join('、'):''}`,4000),300)}
 buildLevel(0,7,false);updHud();requestAnimationFrame(loop);
-window.__game={raster,flood,reachedNear,get bagCap(){return BAGCAP},groundItems,nearGround,pickGround,stations,openPanel,closePanel,useStation,get hubSt(){return hubSt},get state(){return state},get level(){return level},get S(){return S},cine,skipCine,player,containers,enemies,doors,heli,openLoot,closeLoot,takeAll,interact,fire,nearContainer,nearDoor,bagValue,deploy,toBase,buildLevel,validate,
+window.__game={get gLabel(){return gLabel},camera,raster,flood,reachedNear,get bagCap(){return BAGCAP},groundItems,nearGround,pickGround,stations,openPanel,closePanel,useStation,get hubSt(){return hubSt},get state(){return state},get level(){return level},get S(){return S},cine,skipCine,player,containers,enemies,doors,heli,openLoot,closeLoot,takeAll,interact,fire,nearContainer,nearDoor,bagValue,deploy,toBase,buildLevel,validate,
   hurtEnemy(i,d){const e=enemies[i];if(e&&e.alive)damageEnemy(e,d||999,false,null)},killAll(){for(const e of enemies)if(e.alive)killEnemy(e)},setRunT(t){runT=t},
   start(){$('btnStart').click()},
   face(x,z,y){const e=new THREE.Vector3(x,y==null?1.6:y,z);const d=e.sub(new THREE.Vector3(player.pos.x,1.6,player.pos.z));player.yaw=Math.atan2(-d.x,-d.z);player.pitch=Math.atan2(d.y,Math.hypot(d.x,d.z))},
