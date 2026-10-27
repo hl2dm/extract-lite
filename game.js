@@ -119,7 +119,7 @@ function box(w,h,d,x,y,z,mat,opt={}){
   return m}
 function clearWorld(){
   world.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material&&o.material.userData.own){if(o.material.map)o.material.map.dispose();o.material.dispose()}});
-  world.clear();colliders.length=0;solids.length=0;containers.length=0;enemies.length=0;doors.length=0;
+  world.clear();colliders.length=0;solids.length=0;containers.length=0;groundItems.length=0;enemies.length=0;doors.length=0;
   for(const q of particles){scene.remove(q.m);q.m.geometry.dispose();q.m.material.dispose()}particles.length=0;
   for(const t of tracers){scene.remove(t.l);t.l.geometry.dispose();t.l.material.dispose()}tracers.length=0;
   lamps.forEach(l=>l.intensity=0);}
@@ -127,7 +127,7 @@ function emojiTex(ic,bg){const c=document.createElement('canvas');c.width=c.heig
   if(bg){x.fillStyle=bg;x.beginPath();x.arc(64,64,60,0,7);x.fill()}x.font='80px serif';x.textAlign='center';x.textBaseline='middle';x.fillText(ic,64,70);return new THREE.CanvasTexture(c)}
 
 // ================= CONTAINERS =================
-const containers=[],doors=[];
+const containers=[],doors=[],groundItems=[];
 let level=null;
 function rollRarity(p){let r=rng();for(let i=0;i<p.length;i++){if((r-=p[i])<0)return i}return p.length-1}
 function poolFor(kind){const p=POOLS[CK[kind].p].slice();const L=S.upg.luck,sh=L*0.035;const s2=Math.min(sh,p[0]);if(s2>0){p[0]-=s2;p[3]+=s2*0.6;p[4]+=s2*0.4}return p}
@@ -425,6 +425,7 @@ function updObjective(){if(!level)return;const n=aliveEnemies();const tl=BAL.rai
   $('objective').textContent=n?(tl<=BAL.boardWindow?'駕駛不想等了：現在就能上直升機！':`目標：搜刮・清除 ${n} 名敵人・上直升機撤離`):'目標：上直升機（E）撤離'}
 function interact(){
   if(nearHeli()){if(!canBoard()){toast(`駕駛說：外面還有 ${aliveEnemies()} 個敵人，先處理他們。<br><small>（或等到剩 1 分鐘，他就懶得管了）</small>`);SFX.deny();return}extract();return}
+  const g0=nearGround();if(groundWins(g0)){pickGround(g0);return}
   const d=nearDoor(),c0=nearContainer();if(d&&(!c0||Math.hypot(d.pos.x-player.pos.x,d.pos.z-player.pos.z)<Math.hypot(c0.pos.x-player.pos.x,c0.pos.z-player.pos.z))){if(d.open)return;const ki=player.bag.findIndex(i=>i.key);if(ki<0){toast('🔒 上鎖了。鑰匙應該在某個容器裡。');SFX.deny();return}
     player.bag.splice(ki,1);d.open=true;const i=colliders.indexOf(d.col);if(i>=0)colliders.splice(i,1);const j=solids.indexOf(d.mesh);if(j>=0)solids.splice(j,1);d.signs.forEach(s=>s.visible=false);SFX.door();toast('🔓 門開了。裡面一定有好東西（行銷話術）。');updHud();return}
   if(c0)openLoot(c0)}
@@ -497,6 +498,7 @@ function buildLevel(ti,seed,isRandom){
     genYard(th,reserved,minimal);
     if(locked){const cands=containers.filter(c=>c.room!==locked.locked&&c.kind!=='corpse');if(cands.length)level.keyC=pick(cands);else{continue}}
     res=validate();if(res.ok)break}
+  spawnGround(res.seen);
   // place key
   if(level.keyC)level.keyC.items.unshift({key:true,r:2,ic:'🔑',name:'門禁鑰匙',v:0,p:0,state:'wait'});
   // spots: reached cells far from spawn
@@ -630,6 +632,41 @@ function showExtract(){state='end';const v=bagValue(),bag=player.bag.filter(i=>!
   ${info.quest?'<div style="color:#ffd54a">✔ 任務達成！回基地找老K領錢。</div>':''}
   <div class="sat">${sat}</div>`;
   $('end').classList.remove('hidden')}
+// ================= GROUND LOOT (instant pickup) =================
+const GPOOL=[0.52,0.29,0.13,0.05,0.01];
+let gLabel=null;
+function spawnGround(seen){
+  groundItems.length=0;const sp=level.spawn;const n=ri(6,14);const L=S.upg.luck*0.02;const pool=GPOOL.slice();pool[0]-=L;pool[3]+=L*0.6;pool[4]+=L*0.4;
+  for(let t=0;t<3000&&groundItems.length<n;t++){
+    const x=-BAL.half+2+rng()*(BAL.half*2-4),z=-BAL.half+2+rng()*(BAL.half*2-4);const X=Math.floor((x+RO)/RC),Z=Math.floor((z+RO)/RC);
+    let ok=true;for(let dz=-2;dz<=2&&ok;dz++)for(let dx=-2;dx<=2;dx++)if(!seen[(Z+dz)*RN+X+dx]){ok=false;break}if(!ok)continue;
+    if(Math.hypot(x-sp.x,z-sp.z)<5||Math.hypot(x-heli.position.x,z-heli.position.z)<6)continue;
+    if(groundItems.some(g=>Math.hypot(g.pos.x-x,g.pos.z-z)<3.5))continue;
+    if(containers.some(c=>Math.hypot(c.pos.x-x,c.pos.z-z)<1.6))continue;
+    const r=rollRarity(pool);let list=ITEMS.filter(i=>i[0]===r);if(rng()<0.6){const tl=level.theme.items.filter(i=>i[0]===r);if(tl.length)list=tl}
+    const d=list[Math.floor(rng()*list.length)];
+    const it={r:d[0],ic:d[1],name:d[2],v:Math.max(1,Math.round(d[3]*(0.85+rng()*0.3)*level.vmult)),p:0,state:'done',ground:true};
+    const grp=new THREE.Group();grp.position.set(x,0,z);world.add(grp);
+    const col=new THREE.Color(RCSS[r]);
+    const glow=new THREE.Mesh(new THREE.CircleGeometry(0.42,20),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.35,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glow.material.userData.own=true;glow.rotation.x=-Math.PI/2;glow.position.y=0.03;grp.add(glow);
+    const base=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.06,0.26),new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.6}));base.material.userData.own=true;base.position.y=0.06;grp.add(base);
+    const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:emojiTex(d[1]),transparent:true}));spr.material.userData.own=true;spr.scale.set(0.5,0.5,1);spr.position.y=0.42;grp.add(spr);
+    groundItems.push({it,pos:new THREE.Vector3(x,0.3,z),grp,glow,base,spr,ph:rng()*6})}
+  gLabel=textSprite('',{border:'#ffd54a',w:1.9});gLabel.visible=false;world.add(gLabel)}
+function nearGround(){const fx=-Math.sin(player.yaw),fz=-Math.cos(player.yaw);let best=null,bd=1e9;
+  for(const g of groundItems){const dx=g.pos.x-player.pos.x,dz=g.pos.z-player.pos.z,d=Math.hypot(dx,dz);if(d>1.8)continue;
+    if(d>0.9&&(dx*fx+dz*fz)/d<0.3)continue;if(d<bd){bd=d;best=g}}return best}
+const gDist=o=>Math.hypot(o.pos.x-player.pos.x,o.pos.z-player.pos.z);
+function groundWins(g){if(!g)return false;const gd=gDist(g);const d=nearDoor(),c=nearContainer();if(d&&gDist(d)<gd)return false;if(c&&gDist(c)<gd)return false;return true}
+function pickGround(g){if(player.bag.length>=BAGCAP){toast('背包滿了。地上的就留給下一位吧。');SFX.deny();return false}
+  const i=groundItems.indexOf(g);if(i<0)return false;groundItems.splice(i,1);
+  g.grp.traverse(o=>{if(o.geometry&&!o.isSprite)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose()}});world.remove(g.grp);
+  player.bag.push(g.it);SFX.pickup();burst(g.pos.clone().setY(0.4),new THREE.Color(RCSS[g.it.r]).getHex(),8);
+  toast(`撿起 <span style="color:${RCSS[g.it.r]}">${g.it.ic} ${g.it.name}</span>　${fmt(g.it.v)}`,1100);renderBag();updHud();return true}
+function stepGround(dt,g){const t=performance.now()/1000;
+  for(const o of groundItems){o.spr.position.y=0.42+Math.sin(t*2.2+o.ph)*0.06;o.base.rotation.y+=dt*1.2;o.glow.material.opacity=0.25+Math.sin(t*3+o.ph)*0.12+(o===g?0.25:0);o.glow.scale.setScalar(o===g?1.25:1)}
+  if(gLabel){if(g&&state==='play'){gLabel.visible=true;const txt=`[E] 撿起 ${g.it.name} ${fmt(g.it.v)}`;if(gLabel.userData.t!==txt){gLabel.userData.t=txt;gLabel.userData.draw(txt)}gLabel.position.set(g.pos.x,1.05+Math.sin(t*2)*0.03,g.pos.z)}else gLabel.visible=false}}
 // ================= BASE HUB (walkable) =================
 const stations=[];let hubSt=null,npcGrp=null,npcBubble=null,npcBubT=0,hubT=0;
 function textSprite(txt,o={}){const c=document.createElement('canvas');c.width=512;c.height=128;const tex=new THREE.CanvasTexture(c);
@@ -784,6 +821,7 @@ function loop(now){
   for(let i=tracers.length-1;i>=0;i--){const t=tracers[i];t.t-=dt;t.l.material.opacity=Math.max(0,t.t/0.08);if(t.t<=0){scene.remove(t.l);t.l.geometry.dispose();t.l.material.dispose();tracers.splice(i,1)}}
   for(const d of doors)if(d.open&&d.t<1){d.t=Math.min(1,d.t+dt*1.5);d.mesh.position.y=1.15-d.t*2.25}
   if(state==='hub'||state==='base')stepHub(dt);
+  if(level&&groundItems.length+(gLabel?1:0)&&state!=='hub'&&state!=='base')stepGround(dt,state==='play'&&groundWins(nearGround())?nearGround():null);
   document.body.classList.toggle('inhub',state==='hub'||state==='base');
   if(state!=='extracting'&&!(state==='end'&&cine.done)&&state!=='menu'){camera.position.set(player.pos.x,1.6+Math.sin(bob)*0.03,player.pos.z);camera.rotation.set(player.pitch,player.yaw,0,'YXZ')}
   else if(state==='menu'){baseCamT+=dt;camera.position.set(Math.sin(baseCamT*0.1)*14,5,Math.cos(baseCamT*0.1)*14);camera.lookAt(0,1,0)}
@@ -792,13 +830,13 @@ function loop(now){
   if(inRaid||state==='extracting'){const hd=player.pos.distanceTo(heli.position);SFX.rotor(Math.min(1,(rs/40)*Math.max(0.15,1-hd/60)))}else SFX.rotor(0);
   heli.userData.rotor.rotation.y+=dt*rs;heli.userData.rotor2.rotation.y+=dt*rs;heli.userData.tail.rotation.x+=dt*rs*2;
   if(state==='extracting')stepCine(dt);
-  let pr='';if(state==='hub')pr=hubPrompt();else if(state==='play'){if(nearHeli())pr=canBoard()?'按 <kbd>E</kbd> 登機撤離':`還有 ${aliveEnemies()} 名敵人（或等到剩 1 分鐘）`;else{const d=nearDoor(),c=nearContainer();if(d&&(!c||Math.hypot(d.pos.x-player.pos.x,d.pos.z-player.pos.z)<c.pos.distanceTo(new THREE.Vector3(player.pos.x,c.pos.y,player.pos.z))))pr=player.bag.some(i=>i.key)?'按 <kbd>E</kbd> 用鑰匙開門':'🔒 上鎖的門（需要鑰匙）';else{if(c)pr=`按 <kbd>E</kbd> 搜刮${c.label}${c.items.length?'':'（空）'}`}}}
+  let pr='';if(state==='hub')pr=hubPrompt();else if(state==='play'){if(nearHeli())pr=canBoard()?'按 <kbd>E</kbd> 登機撤離':`還有 ${aliveEnemies()} 名敵人（或等到剩 1 分鐘）`;else{const gg=nearGround();if(groundWins(gg))pr=`按 <kbd>E</kbd> 撿起 <span style="color:${RCSS[gg.it.r]}">${gg.it.ic} ${gg.it.name}</span> ${fmt(gg.it.v)}`;else{const d=nearDoor(),c=nearContainer();if(d&&(!c||Math.hypot(d.pos.x-player.pos.x,d.pos.z-player.pos.z)<c.pos.distanceTo(new THREE.Vector3(player.pos.x,c.pos.y,player.pos.z))))pr=player.bag.some(i=>i.key)?'按 <kbd>E</kbd> 用鑰匙開門':'🔒 上鎖的門（需要鑰匙）';else{if(c)pr=`按 <kbd>E</kbd> 搜刮${c.label}${c.items.length?'':'（空）'}`}}}}
   const pe=$('prompt');if(pe.dataset.h!==pr){pe.innerHTML=pr;pe.dataset.h=pr;pe.style.display=pr?'block':'none'}
   renderer.render(scene,camera);requestAnimationFrame(loop)}
 // title backdrop: a random house level
 if(S.inRaid){const g0=S.inRaid.gear||[];const g=[];for(const id of g0){if(Math.random()<BAL.insurance)S.gear[id]=(S.gear[id]||0)+1;else g.push(id)}S.inRaid=null;S.stats.deaths++;save();setTimeout(()=>toast(`上一局中途離開，視同陣亡。${g.length?'遺失：'+g.map(gearName).join('、'):''}`,4000),300)}
 buildLevel(0,7,false);updHud();requestAnimationFrame(loop);
-window.__game={stations,openPanel,closePanel,useStation,get hubSt(){return hubSt},get state(){return state},get level(){return level},get S(){return S},cine,skipCine,player,containers,enemies,doors,heli,openLoot,closeLoot,takeAll,interact,fire,nearContainer,nearDoor,bagValue,deploy,toBase,buildLevel,validate,
+window.__game={raster,flood,reachedNear,get bagCap(){return BAGCAP},groundItems,nearGround,pickGround,stations,openPanel,closePanel,useStation,get hubSt(){return hubSt},get state(){return state},get level(){return level},get S(){return S},cine,skipCine,player,containers,enemies,doors,heli,openLoot,closeLoot,takeAll,interact,fire,nearContainer,nearDoor,bagValue,deploy,toBase,buildLevel,validate,
   hurtEnemy(i,d){const e=enemies[i];if(e&&e.alive)damageEnemy(e,d||999,false,null)},killAll(){for(const e of enemies)if(e.alive)killEnemy(e)},setRunT(t){runT=t},
   start(){$('btnStart').click()},
   face(x,z,y){const e=new THREE.Vector3(x,y==null?1.6:y,z);const d=e.sub(new THREE.Vector3(player.pos.x,1.6,player.pos.z));player.yaw=Math.atan2(-d.x,-d.z);player.pitch=Math.atan2(d.y,Math.hypot(d.x,d.z))},
