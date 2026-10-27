@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>極速撤離 Extract-Lite</title>
+<link rel="stylesheet" href="style.css?v=7">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="hp"><span>HP</span><div class="bar"><i id="hpfill"></i></div><b id="hptxt">100</b></div>
+  <div id="ammo">30 / ∞</div>
+  <div id="value">背包價值 <b id="valtxt">$0</b></div>
+  <div id="objective"></div>
+  <div id="raidinfo"></div>
+  <div id="prompt"></div>
+  <div id="hubhint"></div>
+  
+  <div id="toast"></div>
+  <div id="dmg"></div>
+  <div id="hitm"></div>
+  <div id="timer">00:00.0</div>
+  <div id="flashfx"></div>
+</div>
+<div id="start" class="screen">
+  <h1>極速撤離 <small>EXTRACT-LITE v7</small></h1><div class="vtag">v7・可走動互動基地</div>
+  <p class="tag">沒有大量敵人。只有轉圈圈、五個隨機生成的地圖，和一個會碎念的基地老闆。</p>
+  <div class="keys">
+    <div><kbd>W A S D</kbd> 移動　<kbd>Shift</kbd> 跑</div>
+    <div><kbd>滑鼠</kbd> 視角　<kbd>左鍵</kbd> 射擊　<kbd>R</kbd> 換彈</div>
+    <div><kbd>E</kbd> 搜刮 / 開門 / 登機　<kbd>Tab</kbd> 背包　<kbd>Esc</kbd> 關閉</div>
+    <div class="tonly">手機：左半邊拖曳移動、右半邊拖曳轉視角</div>
+  </div>
+  <button id="btnStart">進入基地</button>
+</div>
+<div id="touchui" class="hidden">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tbtns"><div data-btn="fire" class="tb big">射擊</div><div data-btn="KeyE" class="tb">E<br><small>搜/登機</small></div><div data-btn="KeyF" class="tb">F<br><small>全拿</small></div><div data-btn="KeyR" class="tb">R<br><small>換彈</small></div><div data-btn="ShiftLeft" class="tb">跑</div></div>
+</div>
+<div id="loot" class="hidden">
+  <div class="panel"><h2 id="lootTitle">容器</h2><div id="cgrid" class="grid"></div>
+    <div class="row"><button id="btnTakeAll">全部拿走 (F)</button><button id="btnSkip" title="立即揭曉目前這格，但價值 -50%">💸 付費加速</button><button id="btnClose">關閉 (E)</button></div></div>
+  <div class="panel"><h2>背包 <span id="bpcount"></span></h2><div id="bgrid" class="grid"></div>
+    <div class="row">總價值 <b id="bpval">$0</b></div></div>
+</div>
+<div id="base" class="hidden"><div class="bpanel">
+  <div class="bhead"><b>🏠 基地</b><span id="bmoney">$0</span><button id="bclose" title="Esc / Tab">✕ 走動</button></div>
+  <div id="bnpc" class="npcline"></div>
+  <div id="btabs"><button data-tab="deploy">出擊</button><button data-tab="stash">倉庫</button><button data-tab="shop">商店</button><button data-tab="upg">升級</button><button data-tab="quest">任務</button></div>
+  <div id="bbody"></div></div></div>
+<div id="cine" class="hidden"><div class="lb top"></div><div class="lb bot"></div><div id="cineTitle"><div class="zh">撤離成功</div><div class="en">EXTRACTED</div><div id="cineSub"></div></div><div id="cineSkip">點擊 / E 跳過</div></div>
+<div id="end" class="screen hidden"><h1 id="endTitle"></h1><div id="endBody"></div><button id="btnBase">返回基地</button></div>
+<button id="btnMenu">📋 選單 <small>(Tab)</small></button>
+<script src="vendor/three.min.js?v=7"></script>
+<script src="sfx.js?v=7"></script>
+<script src="touch.js?v=7"></script>
+<script src="game.js?v=7"></script>
+</body>
+</html>
